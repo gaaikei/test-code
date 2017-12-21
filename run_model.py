@@ -5,7 +5,7 @@ import sys
 import argparse
 import numpy as np
 
-from models.dense_net_3d import DenseNet3D
+from models.twoStreamDenseNet import twoStreamDenseNet
 from data_providers.utils import get_data_provider_by_path
 
 
@@ -140,7 +140,7 @@ if __name__ == '__main__':
     # ==========================================================================
     # DATA PREPARATION
     # ==========================================================================
-    train_params['test']  = args.test
+    train_params['test'] = args.test
     train_params['train'] = args.train
     if not args.train:
         train_params['validation_set'] = False

@@ -1,4 +1,4 @@
-from data import Data
+from .data import Data
 
 """Args
     path: path to the video data folder
