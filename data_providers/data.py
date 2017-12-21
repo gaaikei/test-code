@@ -1,9 +1,9 @@
 import os
 import random
-import tempfile
-import numpy as np
+# import tempfile
 from Queue import Queue
 from threading import Thread
+import numpy as np
 import cv2
 
 class Data(object):
@@ -120,7 +120,7 @@ class DataQueue(object):
         return videos, labels
 
 
-class Dataset(object):
+class DataProvider(object):
     """get three types of data"""
     def __init__(self, path, num_classes, validation_set=None, test=False,
                  validation_split=None, normalization=None, crop_size=(64, 64),
@@ -138,27 +138,53 @@ class Dataset(object):
         self._crop_size = crop_size
         self._sequence_length = sequence_length
 
-        train_labels = self.get_video_lists(os.path.join(self._path, 'train.list'))
-        test_labels = self.get_video_lists(os.path.join(self._path, 'test.list'))
+
+        self.train, self.validation, self.test = self.get_data(self._path, validation_set, self._num_classes,self._crop_size)
+
+    def get_data(self, path, num_classes, validation_set=None, test=False,
+                 validation_split=None, normalization=None, crop_size=(64, 64),
+                 train_queue=None, valid_queue=None, test_queue=None, sequence_length=16,
+                 train=False, queue_size=300, **kwargs):
+        
+        self._dynamic_path = self._path + '/hmdb10_dyanmic'
+        self._frames_path = self._path + 'hmdb10_frames'
+
+        dynamic_train_labels = self.get_video_lists(os.path.join(self._dynamic_path, 'train.list'))
+        dynamic_test_labels = self.get_video_lists(os.path.join(self._dynamic_path, 'test.list'))
+
+        frames_train_labels = self.get_video_lists(os.path.join(self._frames_path, 'train.list'))
+        frames_test_labels = self.get_video_lists(os.path.join(self._frames_path, 'test.list'))
 
         if validation_set and validation_split:
-            random.shuffle(train_labels)
-            valid_labels = train_labels[:validation_split]
-            train_labels = train_labels[validation_split:]
-            self.validation = Data('validation', valid_labels, normalization,
-                                   sequence_length, crop_size, num_classes, queue_size)
+            random.shuffle(dynamic_train_labels)
+            valid_labels = dynamic_train_labels[:validation_split]
+            dynamic_train_labels = dynamic_train_labels[validation_split:]
+            self.validation.dynmaic = Data('validation', valid_labels, normalization,
+                                           sequence_length, crop_size, num_classes, queue_size)
+
+            random.shuffle(frames_train_labels)
+            valid_labels = frames_train_labels[:validation_split]
+            frames_train_labels = frames_train_labels[validation_split:]
+            self.validation.frames = Data('validation', valid_labels, normalization,
+                                          sequence_length, crop_size, num_classes, queue_size)
 
         if train:
-            self.train = Data('train', train_labels, normalization, sequence_length,
-                crop_size, num_classes, queue_size)
-
+            self.train.dynamic = Data('train', dynamic_train_labels, normalization, sequence_length,
+                                      crop_size, num_classes, queue_size)
+            self.train.frames = Data('train', frames_train_labels, normalization, sequence_length,
+                                     crop_size, num_classes, queue_size)
         if test:
-            self.test = Data('test', test_labels, normalization, sequence_length,
-                crop_size, num_classes, queue_size)
+            self.test.dynamic = Data('test', dynamic_test_labels, normalization, sequence_length,
+                                     crop_size, num_classes, queue_size)
+            self.test.frames = Data('test', frames_test_labels,
+                                    normalization, sequence_length, crop_size, num_classes, queue_size)
 
         if validation_set and not validation_split:
-            self.validation = Data('validation', test_labels,
-            normalization, sequence_length,crop_size, num_classes, queue_size)
+            self.validation.dynamic = Data('validation', dynamic_test_labels,
+                normalization, sequence_length, crop_size, num_classes, queue_size)
+            self.validation.frames = Data('validation', frames_test_labels,
+                normalization, sequence_length, crop_size, num_classes, queue_size)
+        return self.train, self.validation, self.test
 
 
     def get_video_lists(self, path):

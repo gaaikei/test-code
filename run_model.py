@@ -49,13 +49,13 @@ if __name__ == '__main__':
         default=20,
         help='Depth of whole network, restricted to paper choices (default: %(default)s)')
     parser.add_argument(
-        '--dataset', '-ds', type=str, 
+        '--dataset', '-ds', type=str,
         help='Path to the dataset')
     parser.add_argument(
         '--total_blocks', '-tb', type=int, default=3, metavar='',
         help='Total blocks of layers stack (default: %(default)s)')
     parser.add_argument(
-        '--keep_prob', '-kp', type=float, default=1.0, metavar='', 
+        '--keep_prob', '-kp', type=float, default=1.0, metavar='',
         help="Keep probability for dropout.")
     parser.add_argument(
         '--gpu_id', '-gid', type=str, default='0',
@@ -75,7 +75,7 @@ if __name__ == '__main__':
     parser.add_argument(
         '--no-logs', dest='should_save_logs', action='store_false',
         help='Do not write tensorflow logs')
-    parser.set_defaults(should_save_logs=True)  
+    parser.set_defaults(should_save_logs=True)
     parser.add_argument(
         '--saves', dest='should_save_model', action='store_true',
         help='Save model during training')
