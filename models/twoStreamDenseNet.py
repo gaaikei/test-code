@@ -27,7 +27,8 @@ class twoStreamDenseNet(object):
         self.bc_mode = bc_mode
         # compression rate at the transition layers
         self.reduction              = reduction
-
+        self.frames_data = data_provider.frames
+        self.dynamic_data = data_provider.dynamic
         if not bc_mode:
             print(("Build %s model with %d blocks, "
             "%d composite layers each." % (
@@ -164,10 +165,14 @@ class twoStreamDenseNet(object):
     def _define_inputs(self):
         shape = [None]
         shape.extend(self.data_shape)
-        self.videos = tf.placeholder(
+        self.frames = tf.placeholder(
             tf.float32,
             shape=shape,
-            name='input_videos')
+            name='input_frames')
+        self.dynamic = tf.placeholder(
+            tf.float32,
+            shape=shape,
+            name='input_dynamic')
         self.labels = tf.placeholder(
             tf.float32,
             shape=[None, self.n_classes],
@@ -371,7 +376,7 @@ class twoStreamDenseNet(object):
         # first - initial 3 x 3 x 3 conv to first_output_features
         with tf.variable_scope("spatial_Initial_convolution"):
             spatial_output = self.conv3d(
-                self.videos,
+                self.frames,
                 out_features=self.first_output_features,
                 kernel_size=7,
                 strides=[1, 1, 2, 2, 1])
@@ -380,7 +385,7 @@ class twoStreamDenseNet(object):
 
         with tf.variable_scope("temporal_Initial_convolution"):
             temporal_output = self.conv3d(
-            self.videos,
+            self.dynamic,
             out_features=self.first_output_features,
             kernel_size=7,
             strides=[1, 1, 2, 2, 1])
@@ -426,6 +431,7 @@ class twoStreamDenseNet(object):
         with tf.variable_scope("Transition_to_classes"):
             logits = self.trainsition_layer_to_classes(output)
         prediction = tf.nn.softmax(logits)
+
 
         # Losses
         cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
@@ -507,7 +513,8 @@ class twoStreamDenseNet(object):
             #   [batch_size, num_classes] 
             videos, labels = data.next_batch(batch_size)
             feed_dict = {
-            self.videos: videos,
+            self.dynamic: dynmaic,
+            self.frames: frames,
             self.labels: labels,
             self.learning_rate: learning_rate,
             self.is_training: True,
@@ -532,10 +539,12 @@ class twoStreamDenseNet(object):
         total_loss = []
         total_accuracy = []
         for i in range(num_examples // batch_size):
-            batch = data.next_batch(batch_size)
+            dynamic = data.dynmaic.next_batch(batch_size)
+            frames = data.frames.next_batch(batch_size)
             feed_dict = {
-            self.videos: batch[0],
-            self.labels: batch[1],
+            self.dynamic: dynamic[0],
+            self.frames: frames[0],
+            self.labels: dynamic[1]
             self.is_training: False,
             }
             fetches = [self.cross_entropy, self.accuracy]

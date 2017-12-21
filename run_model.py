@@ -150,7 +150,7 @@ if __name__ == '__main__':
     # TRAINING & TESTING
     # ==========================================================================
     print("Initialize the model..")
-    model = DenseNet3D(data_provider=data_provider, **model_params)
+    model = twoStreamDenseNet(data_provider=data_provider, **model_params)
     if args.train:
         print("Data provider train videos: ", data_provider.train.num_examples)
         model.train_all_epochs(train_params)

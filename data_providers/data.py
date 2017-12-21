@@ -76,7 +76,7 @@ class Data(object):
                 for root, dirs, files in os.walk(video_path):
                     total += len(files)
             self.examples = total / self.sequence_length
-        return self.examples
+        return self.examples * 2
 
     def next_batch(self, batch_size):
         videos, labels = self.queue.get(batch_size)
@@ -125,7 +125,7 @@ class DataProvider(object):
     def __init__(self, path, num_classes, validation_set=None, test=False,
                  validation_split=None, normalization=None, crop_size=(64, 64),
                  train_queue=None, valid_queue=None, test_queue=None, sequence_length=16,
-                 train=False, queue_size=300, **kwargs):
+                 train=False, queue_size=200, **kwargs):
         """
         path: path to data
         num_classes: number of classes
@@ -149,16 +149,20 @@ class DataProvider(object):
         self._dynamic_path = self._path + '/hmdb10_dyanmic'
         self._frames_path = self._path + 'hmdb10_frames'
 
-        dynamic_train_labels = self.get_video_lists(os.path.join(self._dynamic_path, 'train.list'))
-        dynamic_test_labels = self.get_video_lists(os.path.join(self._dynamic_path, 'test.list'))
+        # dynamic_train_labels = self.get_video_lists(os.path.join(self._dynamic_path, 'train.list'))
+        # dynamic_test_labels = self.get_video_lists(os.path.join(self._dynamic_path, 'test.list'))
 
-        frames_train_labels = self.get_video_lists(os.path.join(self._frames_path, 'train.list'))
-        frames_test_labels = self.get_video_lists(os.path.join(self._frames_path, 'test.list'))
+        # frames_train_labels = self.get_video_lists(os.path.join(self._frames_path, 'train.list'))
+        # frames_test_labels = self.get_video_lists(os.path.join(self._frames_path, 'test.list'))
+
+        train_labels = self.get_video_lists(os.path.join(self._frames_path, 'train.list'))
+        test_labels = self.get_video_lists(os.path.join(self._frames_path, 'test.list'))
 
         if validation_set and validation_split:
-            random.shuffle(dynamic_train_labels)
-            valid_labels = dynamic_train_labels[:validation_split]
-            dynamic_train_labels = dynamic_train_labels[validation_split:]
+            random.shuffle(train_labels)
+            valid_labels = train_labels[:validation_split]
+            train_labels = train_labels[validation_split:]
+            dynamic_train_labels = 
             self.validation.dynmaic = Data('validation', valid_labels, normalization,
                                            sequence_length, crop_size, num_classes, queue_size)
 
