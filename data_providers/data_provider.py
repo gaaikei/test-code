@@ -155,29 +155,37 @@ class DataProvider(object):
         # frames_train_labels = self.get_video_lists(os.path.join(self._frames_path, 'train.list'))
         # frames_test_labels = self.get_video_lists(os.path.join(self._frames_path, 'test.list'))
 
-        train_labels = self.get_video_lists(os.path.join(self._frames_path, 'train.list'))
-        test_labels = self.get_video_lists(os.path.join(self._frames_path, 'test.list'))
+        # train_labels = self.get_video_lists(os.path.join(self._path, 'train.list'))
+        # test_labels = self.get_video_lists(os.path.join(self._path, 'test.list'))
+
+        train_labels = self.get_path_and_label(os.path.join(self._path, 'train.list'))
+        test_labels = self.get_path_and_label(os.path.join(self._path, 'test.list'))
+
 
         if validation_set and validation_split:
+            #shuffle data
             random.shuffle(train_labels)
             valid_labels = train_labels[:validation_split]
             train_labels = train_labels[validation_split:]
-            dynamic_train_labels = 
-            self.validation.dynmaic = Data('validation', valid_labels, normalization,
+            #add dynamic or frames path
+            frames_valid_labels = self.get_video_lists(valid_labels, 'frames/')
+            dynamic_valid_labels = self.get_video_lists(valid_labels, 'dynamic/')
+            frames_train_labels = self.get_video_lists(train_labels,'frames/')
+            dynamic_train_labels = self.get_video_lists(train_labels,'dynmaic/')
+
+            self.validation.dynmaic = Data('validation', dynamic_valid_labels, normalization,
                                            sequence_length, crop_size, num_classes, queue_size)
-
-            random.shuffle(frames_train_labels)
-            valid_labels = frames_train_labels[:validation_split]
-            frames_train_labels = frames_train_labels[validation_split:]
-            self.validation.frames = Data('validation', valid_labels, normalization,
+            self.validation.frames = Data('validation', frames_valid_labels, normalization,
                                           sequence_length, crop_size, num_classes, queue_size)
-
+            
         if train:
             self.train.dynamic = Data('train', dynamic_train_labels, normalization, sequence_length,
                                       crop_size, num_classes, queue_size)
             self.train.frames = Data('train', frames_train_labels, normalization, sequence_length,
                                      crop_size, num_classes, queue_size)
         if test:
+            dynamic_test_labels = self.get_video_lists(test_labels,'dynamic/')
+            frames_test_labels = self.get_video_lists(test_labels,'frames/')
             self.test.dynamic = Data('test', dynamic_test_labels, normalization, sequence_length,
                                      crop_size, num_classes, queue_size)
             self.test.frames = Data('test', frames_test_labels,
@@ -191,10 +199,14 @@ class DataProvider(object):
         return self.train, self.validation, self.test
 
 
-    def get_video_lists(self, path):
+    def get_path_and_label(self, path):
         lines = open(path, 'r')
         lines = list(lines)
-        new_lines = [os.path.join(self._path, line) for line in lines]
+        return lines
+        
+    def get_video_lists(self, video_list, type_path):
+        lines = video_list
+        new_lines = [os.path.join(self._path, type_path, line) for line in lines]
         return new_lines
 
     @property

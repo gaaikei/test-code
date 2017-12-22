@@ -404,35 +404,52 @@ class twoStreamDenseNet(object):
         #       output = self.transition_layer(output, pool_depth)
 
         #add 2 blocks before fusion:
+
         with tf.variable_scope("spatial_Block_1"):
             spatial_output = self.add_block(spatial_output, growth_rate, layers_per_block)
+        with tf.variable_scope("Transition_after_block_%d" % block):
+            pool_depth = 2
+            spatial_output = self.transition_layer(spatial_output, pool_depth)
         with tf.variable_scope("spatial_Block_2"):
             spatial_output = self.add_block(spatial_output, growth_rate, layers_per_block)
+        with tf.variable_scope("Transition_after_block_%d" % block):
+            pool_depth = 2
+            spatial_output = self.transition_layer(spatial_output, pool_depth)
+
 
         #add 2 blocks before fusion:
         with tf.variable_scope("spatial_Block_1"):
             temporal_output = self.add_block(temporal_output, growth_rate, layers_per_block)
+        with tf.variable_scope("Transition_after_block_%d" % block):
+            pool_depth = 2
+            temporal_output = self.transition_layer(spatial_output, pool_depth)
         with tf.variable_scope("spatial_Block_2"):
             temporal_output = self.add_block(temporal_output, growth_rate, layers_per_block)
+        with tf.variable_scope("Transition_after_block_%d" % block):
+            pool_depth = 2
+            temporal_output = self.transition_layer(temporal_output, pool_depth)
 
-        #fusion 2 network
+        #fusion
         with tf.variable_scope("NetworkFusion"):
+            spatial_temporal_output = tf.matmul(spatial_output, temporal_output)
 
-            spatial_temporal_output = tf.concat([spatial_output, temporal_output],3)
-            fusion_reshape = tf.reshape(spatial_temporal_concat,[-1, self.sequence_length, 14, 14, 1024])
-            fusion_conv = tf.layers.conv3d(fusion_reshape,filters=512,kernel_size=[3,3,3],
-            strides=(1,1,1), padding='same', activation=tf.nn.relu)
-            pool3d = tf.layers.max_pooling3d(fusion_conv6, pool_size=[self.nFramesPerVid,2,2], 
-                strides=(2,2,2), padding='valid') 
-            pool3d_flat = tf.reshape(pool3d, [-1, 7*7*512])
+        #add  blocks after fusion :
+        with tf.variable_scope("spatial 3rd block"):
+            spatial_output = self.add_block(spatial_temporal_output, growth_rate, layers_per_block)
 
+        with tf.variable_scope("temporal 3rd block"):
+            temporal_output = self.add_block(temporal_output, growth_rate, layers_per_block)
         
 
+
         with tf.variable_scope("Transition_to_classes"):
-            logits = self.trainsition_layer_to_classes(output)
-        prediction = tf.nn.softmax(logits)
+            spatial_logits = self.trainsition_layer_to_classes(spatial_output)
+            temporal_logits = self.trainsition_layer_to_classes(temporal_logits)     
+        
+        spatial_prediction = tf.nn.softmax(spatial_logits)
+        temproal_logits = tf.nn.softmax(temporal_logits)
 
-
+        
         # Losses
         cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
             logits=logits, labels=self.labels))
@@ -542,10 +559,10 @@ class twoStreamDenseNet(object):
             dynamic = data.dynmaic.next_batch(batch_size)
             frames = data.frames.next_batch(batch_size)
             feed_dict = {
-            self.dynamic: dynamic[0],
-            self.frames: frames[0],
-            self.labels: dynamic[1]
-            self.is_training: False,
+                self.frames: frames[0],
+                self.dynamic: dynamic[0],
+                self.labels: dynamic[1],
+                self.is_training: False
             }
             fetches = [self.cross_entropy, self.accuracy]
             loss, accuracy = self.sess.run(fetches, feed_dict=feed_dict)
