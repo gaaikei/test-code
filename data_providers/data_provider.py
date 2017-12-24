@@ -10,13 +10,15 @@ class Data(object):
     """docstring for Data"""
     def __init__(self, name, path, normalization, sequence_length, crop_size,
                  num_classes, queue_size):
-        self.name = name
+
         self.path = path
+        self.name = name
         self.sequence_length = sequence_length
         self.crop_size = crop_size
         self.normalization = normalization
         self.num_classes = num_classes
-        self.queue = DataQueue(name, queue_size)
+        self.queue_size = queue_size
+        self.queue = DataQueue(self.name, self.queue_size)
         self.examples = None
         self._start_data_thread()
 
@@ -98,10 +100,13 @@ class Data(object):
 class DataQueue(object):
     """docstring for Data"""
     def __init__(self, name, max_items, block=True):
-        self.name = name
+        print "init DataQueue:"
+        print "name :",name
+        print "max_items:",max_items
+        self._name = name
         self.block = block
         self.max_items = max_items
-        self.queue = Queue(max_items)
+        self._queue = Queue(max_items)
 
     @property
     def queue(self):
@@ -139,10 +144,13 @@ class DataProvider(object):
         self._crop_size = crop_size
         self._sequence_length = sequence_length
 
+        # _, _, self.test = self.get_data(self._path, validation_set, self._num_classes, self._crop_size)
 
-        self.train, self.validation, self.test = self.get_data(self._path, validation_set,
-                                                               self._num_classes, self._crop_size)
+        # self.train, self.validation, self.test = self.get_data(self._path, validation_set,
+        #                                                        self._num_classes, self._crop_size)
 
+        self.train, self.validation, self.test = self.get_data(self._path,self._num_classes, 
+            validation_set, test, validation_split,normalization=None, self._crop_size)
     def get_data(self, path, num_classes, validation_set=None, test=False,
                  validation_split=None, normalization=None, crop_size=(64, 64),
                  train_queue=None, valid_queue=None, test_queue=None, sequence_length=16,
@@ -186,8 +194,10 @@ class DataProvider(object):
             self.train.frames = Data('train', frames_train_labels, normalization, sequence_length,
                                      crop_size, num_classes, queue_size)
         if test:
+
             dynamic_test_labels = self.get_video_lists(test_labels,'dynamic/')
             frames_test_labels = self.get_video_lists(test_labels,'frames/')
+
             self.test.dynamic = Data('test', dynamic_test_labels, normalization, sequence_length,
                                      crop_size, num_classes, queue_size)
             self.test.frames = Data('test', frames_test_labels,
@@ -198,7 +208,7 @@ class DataProvider(object):
                 normalization, sequence_length, crop_size, num_classes, queue_size)
             self.validation.frames = Data('validation', frames_test_labels,
                 normalization, sequence_length, crop_size, num_classes, queue_size)
-        return self.train, self.validation, self.test
+        return self.train, self.validation#, self._test
 
 
     def get_path_and_label(self, path):

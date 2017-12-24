@@ -27,8 +27,8 @@ class twoStreamDenseNet(object):
         self.bc_mode = bc_mode
         # compression rate at the transition layers
         self.reduction              = reduction
-        self.frames_data = data_provider.frames
-        self.dynamic_data = data_provider.dynamic
+        # self.frames_data = data_provider.frames
+        # self.dynamic_data = data_provider.dynamic
         if not bc_mode:
             print(("Build %s model with %d blocks, "
             "%d composite layers each." % (
