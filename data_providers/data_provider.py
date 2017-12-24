@@ -41,6 +41,7 @@ class Data(object):
             return video
 
     def normalize_image(self, img, normalization):
+        """normalize image by 3 methods"""
         if normalization == 'std':
             img = (img - np.mean(img))/np.std(img)
         elif normalization == 'divide_256':
@@ -139,7 +140,8 @@ class DataProvider(object):
         self._sequence_length = sequence_length
 
 
-        self.train, self.validation, self.test = self.get_data(self._path, validation_set, self._num_classes,self._crop_size)
+        self.train, self.validation, self.test = self.get_data(self._path, validation_set,
+                                                               self._num_classes, self._crop_size)
 
     def get_data(self, path, num_classes, validation_set=None, test=False,
                  validation_split=None, normalization=None, crop_size=(64, 64),

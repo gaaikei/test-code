@@ -161,6 +161,16 @@ class twoStreamDenseNet(object):
         ])
         self.summary_writer.add_summary(summary, epoch)
 
+    def log_test_results(self, predictions, loss, accuracy):
+        testResults = open('testResults.txt', 'w')
+        testResults.write("mean cross_entropy: %f, mean accuracy: %f" % (
+            loss, accuracy))
+        testResults.write("--------------------predictions.spactial-----------------")
+        testResults.writelines(predictions.spactial)
+        testResults.write("--------------------predictions.tempral-----------------")
+        testResults.writelines(predictions.temproal)
+
+
     # (Updated)
     def _define_inputs(self):
         shape = [None]
@@ -447,12 +457,16 @@ class twoStreamDenseNet(object):
             temporal_logits = self.trainsition_layer_to_classes(temporal_logits)     
         
         spatial_prediction = tf.nn.softmax(spatial_logits)
-        temproal_logits = tf.nn.softmax(temporal_logits)
-
+        temproal_prediction = tf.nn.softmax(temporal_logits)
+        self.predictions.spatial = spatial_prediction
+        self.predictions.temporal = temproal_prediction
         
         # Losses
-        cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
-            logits=logits, labels=self.labels))
+        s_cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+            logits=spatial_logits, labels=self.labels))
+        t_cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+            logits=temporal_logits, labels=self.labels))
+        
         self.cross_entropy = cross_entropy
         l2_loss = tf.add_n(
             [tf.nn.l2_loss(var) for var in tf.trainable_variables()])
@@ -536,6 +550,7 @@ class twoStreamDenseNet(object):
             self.learning_rate: learning_rate,
             self.is_training: True,
             }
+
             fetches = [self.train_step, self.cross_entropy, self.accuracy]
             result = self.sess.run(fetches, feed_dict=feed_dict)
             _, loss, accuracy = result
@@ -564,8 +579,8 @@ class twoStreamDenseNet(object):
                 self.labels: dynamic[1],
                 self.is_training: False
             }
-            fetches = [self.cross_entropy, self.accuracy]
-            loss, accuracy = self.sess.run(fetches, feed_dict=feed_dict)
+            fetches = [self.cross_entropy, self.accuracy, self.predictions]
+            loss, accuracy, predictions = self.sess.run(fetches, feed_dict=feed_dict)
             total_loss.append(loss)
             total_accuracy.append(accuracy)
         mean_loss = np.mean(total_loss)
