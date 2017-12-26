@@ -23,12 +23,13 @@ class twoStreamDenseNet(object):
         # value the same as in the original Torch code
         self.first_output_features  = growth_rate * 2
         self.total_blocks           = total_blocks
-        self.layers_per_block       = (depth - (total_blocks + 1)) // total_blo
+        self.layers_per_block       = (depth - (total_blocks + 1)) // total_blocks
         self.bc_mode = bc_mode
         # compression rate at the transition layers
         self.reduction              = reduction
         # self.frames_data = data_provider.frames
         # self.dynamic_data = data_provider.dynamic
+
         if not bc_mode:
             print(("Build %s model with %d blocks, "
             "%d composite layers each." % (
@@ -175,6 +176,7 @@ class twoStreamDenseNet(object):
     def _define_inputs(self):
         shape = [None]
         shape.extend(self.data_shape)
+        #print "shape:",shape
         self.frames = tf.placeholder(
             tf.float32,
             shape=shape,
@@ -385,21 +387,24 @@ class twoStreamDenseNet(object):
         layers_per_block = self.layers_per_block
         # first - initial 3 x 3 x 3 conv to first_output_features
         with tf.variable_scope("spatial_Initial_convolution"):
+            # self.frames shape : [None, 16, 64, 64, 3]
             spatial_output = self.conv3d(
                 self.frames,
                 out_features=self.first_output_features,
-                kernel_size=7,
+                kernel_size=3,
                 strides=[1, 1, 2, 2, 1])
-            # first pooling
+            # [?,16,16,16,24]
             spatial_output = self.pool(spatial_output, k=3, d=3, k_stride=2, d_stride=1)
+            
 
         with tf.variable_scope("temporal_Initial_convolution"):
+            # self.dynamic shape : [None, 16, 64, 64, 3]
             temporal_output = self.conv3d(
             self.dynamic,
             out_features=self.first_output_features,
-            kernel_size=7,
+            kernel_size=3,
             strides=[1, 1, 2, 2, 1])
-            # first pooling
+            # [?,16,16,16,24]
             temporal_output = self.pool(temporal_output, k=3, d=3, k_stride=2, d_stride=1)
 
         # # add N required blocks
@@ -416,57 +421,63 @@ class twoStreamDenseNet(object):
         #add 2 blocks before fusion:
 
         with tf.variable_scope("spatial_Block_1"):
+            # [?,16,16,16,84]
             spatial_output = self.add_block(spatial_output, growth_rate, layers_per_block)
-        with tf.variable_scope("Transition_after_block_%d" % block):
+        with tf.variable_scope("Transition_after_spatial_Block_1"):
             pool_depth = 2
             spatial_output = self.transition_layer(spatial_output, pool_depth)
+            #[?,8,8,8,84]
         with tf.variable_scope("spatial_Block_2"):
             spatial_output = self.add_block(spatial_output, growth_rate, layers_per_block)
-        with tf.variable_scope("Transition_after_block_%d" % block):
+            #[?,8,8,8,144])
+        with tf.variable_scope("Transition_after_spatial_Block_2"):
             pool_depth = 2
             spatial_output = self.transition_layer(spatial_output, pool_depth)
+            #[?,4,4,4,144]
 
 
         #add 2 blocks before fusion:
-        with tf.variable_scope("spatial_Block_1"):
+        with tf.variable_scope("temporal_Block_1"):
             temporal_output = self.add_block(temporal_output, growth_rate, layers_per_block)
-        with tf.variable_scope("Transition_after_block_%d" % block):
+        with tf.variable_scope("Transition_after_temporal_Block_1"):
             pool_depth = 2
-            temporal_output = self.transition_layer(spatial_output, pool_depth)
-        with tf.variable_scope("spatial_Block_2"):
+            temporal_output = self.transition_layer(temporal_output, pool_depth)
+        with tf.variable_scope("temporal_Block_2"):
             temporal_output = self.add_block(temporal_output, growth_rate, layers_per_block)
-        with tf.variable_scope("Transition_after_block_%d" % block):
+        with tf.variable_scope("Transition_after_temporal_Block_2"):
             pool_depth = 2
             temporal_output = self.transition_layer(temporal_output, pool_depth)
 
+
         #fusion
         with tf.variable_scope("NetworkFusion"):
-            spatial_temporal_output = tf.matmul(spatial_output, temporal_output)
+            spatial_temporal_output = tf.multiply(spatial_output, temporal_output)
 
         #add  blocks after fusion :
-        with tf.variable_scope("spatial 3rd block"):
+        with tf.variable_scope("spatial_Block_3"):
             spatial_output = self.add_block(spatial_temporal_output, growth_rate, layers_per_block)
 
-        with tf.variable_scope("temporal 3rd block"):
+        with tf.variable_scope("temporal_Block_3"):
             temporal_output = self.add_block(temporal_output, growth_rate, layers_per_block)
         
 
 
-        with tf.variable_scope("Transition_to_classes"):
+        with tf.variable_scope("Transition_to_classes_s"):
             spatial_logits = self.trainsition_layer_to_classes(spatial_output)
-            temporal_logits = self.trainsition_layer_to_classes(temporal_logits)     
+        with tf.variable_scope("Transition_to_classes_t"):
+            temporal_logits = self.trainsition_layer_to_classes(temporal_output)     
         
         spatial_prediction = tf.nn.softmax(spatial_logits)
         temproal_prediction = tf.nn.softmax(temporal_logits)
-        self.predictions.spatial = spatial_prediction
-        self.predictions.temporal = temproal_prediction
+
         
         # Losses
         s_cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
             logits=spatial_logits, labels=self.labels))
         t_cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
             logits=temporal_logits, labels=self.labels))
-        
+
+        cross_entropy = ( s_cross_entropy + t_cross_entropy )/2
         self.cross_entropy = cross_entropy
         l2_loss = tf.add_n(
             [tf.nn.l2_loss(var) for var in tf.trainable_variables()])
@@ -477,11 +488,16 @@ class twoStreamDenseNet(object):
         self.train_step = optimizer.minimize(
             cross_entropy + l2_loss * self.weight_decay)
 
-        correct_prediction = tf.equal(
-            tf.argmax(prediction, 1),
+        correct_prediction_s = tf.equal(
+            tf.argmax(spatial_prediction, 1),
             tf.argmax(self.labels, 1))
-        self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
-
+        correct_prediction_t = tf.equal(
+            tf.argmax(temproal_prediction, 1),
+            tf.argmax(self.labels, 1))
+        accuracy_s = tf.reduce_mean(tf.cast(correct_prediction_s, tf.float32))
+        accuracy_t = tf.reduce_mean(tf.cast(correct_prediction_t, tf.float32))
+        accuracy = ( accuracy_s + accuracy_t ) /2
+        self.accuracy = accuracy
     # (Updated)
     def train_all_epochs(self, train_params):
         n_epochs           = train_params['n_epochs']
@@ -534,7 +550,7 @@ class twoStreamDenseNet(object):
 
     # (Updated)
     def train_one_epoch(self, data, batch_size, learning_rate):
-        num_examples = data.num_examples
+        num_examples = data.dynamic.num_examples
         total_loss = []
         total_accuracy = []
         for i in range(num_examples // batch_size):
@@ -542,9 +558,10 @@ class twoStreamDenseNet(object):
             #   [batch_size, sequence_length, width, height, channels]
             # labels size is (numpy array):
             #   [batch_size, num_classes] 
-            videos, labels = data.next_batch(batch_size)
+            dynamic, labels = data.dynamic.next_batch(batch_size)
+            frames, labels = data.frames.next_batch(batch_size)
             feed_dict = {
-            self.dynamic: dynmaic,
+            self.dynamic: dynamic,
             self.frames: frames,
             self.labels: labels,
             self.learning_rate: learning_rate,

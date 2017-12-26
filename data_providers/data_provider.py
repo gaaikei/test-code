@@ -17,17 +17,39 @@ class Data(object):
         self.crop_size = crop_size
         self.normalization = normalization
         self.num_classes = num_classes
-        self.queue_size = queue_size
-        self.queue = DataQueue(self.name, self.queue_size)
+        self.queue = DataQueue(name, queue_size)
         self.examples = None
         self._start_data_thread()
+
+
+    def _start_data_thread(self):
+        # print("start thread: %s data preparation ..." % self.name)
+        self.worker = Thread(target=self.get_video_data)
+        self.worker.setDaemon(True)
+        self.worker.start()
+
+    def get_video_data(self):
+        while True:
+            #len(self.path)=1710(hmdb51)
+            index = random.randint(0, len(self.path)-1)
+            # print "path[index]",self.path[index]
+            video_path, label = self.path[index].strip('\n').split()
+            # print "video_path",video_path
+            # print "label:",label
+            video = self.get_frames(video_path, self.sequence_length)
+            if video is not None and len(video) == self.sequence_length:
+                video = np.array(video)
+                label = np.array(int(label))
+                self.queue.put((video, label))
 
     def get_frames(self, filename, sequence_length=16):
         video = []
         start = 0
+        # print "filename[1]",filename[1]
         for parent, dirnames, files in os.walk(filename):
-            filenames = [file for file in files if file.endswith(".jpeg", ".jpg", ".png")]
+            filenames = [file for file in files ]#if file.endswith(".jpeg", ".jpg", ".png")
             if len(filenames) < sequence_length:
+                # print "filenames<16"
                 return  None
             suffix = filenames[0].split('.', 1)[1]
             filenames_int = [i.split('.', 1)[0] for i in filenames]
@@ -54,21 +76,9 @@ class Data(object):
             raise Exception("please set the norm method")
         return img
 
-    def get_video_data(self):
-        while True:
-            index = random.randint(0, len(self.path)-1)
-            video_path, label = self.path[index].strip('\n').split()
-            video = self.get_frames(video_path, self.sequence_length)
-            if video is not None and len(video) == self.sequence_length:
-                video = np.array(video)
-                label = np.array(int(label))
-                self.queue.put((video, label))
 
-    def _start_data_thread(self):
-        print("start thread: %s data preparation ..." % self.name)
-        self.worker = Thread(target=self.get_video_data)
-        self.worker.setDaemon(True)
-        self.worker.start()
+
+
 
     @property
     def num_examples(self):
@@ -100,9 +110,9 @@ class Data(object):
 class DataQueue(object):
     """docstring for Data"""
     def __init__(self, name, max_items, block=True):
-        print "init DataQueue:"
-        print "name :",name
-        print "max_items:",max_items
+        # print "init DataQueue:"
+        # print "name :",name
+        # print "max_items:",max_items
         self._name = name
         self.block = block
         self.max_items = max_items
@@ -110,17 +120,17 @@ class DataQueue(object):
 
     @property
     def queue(self):
-        return self.queue
+        return self._queue
     @property
     def name(self):
-        return self.name
+        return self._name
     def put(self, data):
-        self.queue.put(data, self.block)
+        self._queue.put(data, self.block)
     def get(self, batch_size):
         videos = []
         labels = []
         for i in range(batch_size):
-            video, label = self.queue.get(self.block)
+            video, label = self._queue.get(self.block)
             videos.append(video)
             labels.append(label)
         return videos, labels
@@ -144,82 +154,40 @@ class DataProvider(object):
         self._crop_size = crop_size
         self._sequence_length = sequence_length
 
-        # _, _, self.test = self.get_data(self._path, validation_set, self._num_classes, self._crop_size)
-
-        # self.train, self.validation, self.test = self.get_data(self._path, validation_set,
-        #                                                        self._num_classes, self._crop_size)
-
-        self.train, self.validation, self.test = self.get_data(self._path,self._num_classes, 
-            validation_set, test, validation_split,normalization=None, self._crop_size)
-    def get_data(self, path, num_classes, validation_set=None, test=False,
-                 validation_split=None, normalization=None, crop_size=(64, 64),
-                 train_queue=None, valid_queue=None, test_queue=None, sequence_length=16,
-                 train=False, queue_size=300, **kwargs):
-        
-        self._dynamic_path = self._path + '/hmdb10_dyanmic'
-        self._frames_path = self._path + 'hmdb10_frames'
-
-        # dynamic_train_labels = self.get_video_lists(os.path.join(self._dynamic_path, 'train.list'))
-        # dynamic_test_labels = self.get_video_lists(os.path.join(self._dynamic_path, 'test.list'))
-
-        # frames_train_labels = self.get_video_lists(os.path.join(self._frames_path, 'train.list'))
-        # frames_test_labels = self.get_video_lists(os.path.join(self._frames_path, 'test.list'))
-
-        # train_labels = self.get_video_lists(os.path.join(self._path, 'train.list'))
-        # test_labels = self.get_video_lists(os.path.join(self._path, 'test.list'))
-
         train_labels = self.get_path_and_label(os.path.join(self._path, 'train.list'))
         test_labels = self.get_path_and_label(os.path.join(self._path, 'test.list'))
 
 
         if validation_set and validation_split:
             #shuffle data
+            # print "1"
             random.shuffle(train_labels)
             valid_labels = train_labels[:validation_split]
             train_labels = train_labels[validation_split:]
-            #add dynamic or frames path
-            frames_valid_labels = self.get_video_lists(valid_labels, 'frames/')
-            dynamic_valid_labels = self.get_video_lists(valid_labels, 'dynamic/')
-            frames_train_labels = self.get_video_lists(train_labels,'frames/')
-            dynamic_train_labels = self.get_video_lists(train_labels,'dynmaic/')
-
-            self.validation.dynmaic = Data('validation', dynamic_valid_labels, normalization,
+            self.validation = twoStreamData('validation',self._path, valid_labels, normalization,
                                            sequence_length, crop_size, num_classes, queue_size)
-            self.validation.frames = Data('validation', frames_valid_labels, normalization,
-                                          sequence_length, crop_size, num_classes, queue_size)
-            
         if train:
-            self.train.dynamic = Data('train', dynamic_train_labels, normalization, sequence_length,
+            # print "2"
+            self.train = twoStreamData('train', self._path,train_labels, normalization, sequence_length,
                                       crop_size, num_classes, queue_size)
-            self.train.frames = Data('train', frames_train_labels, normalization, sequence_length,
-                                     crop_size, num_classes, queue_size)
         if test:
-
-            dynamic_test_labels = self.get_video_lists(test_labels,'dynamic/')
-            frames_test_labels = self.get_video_lists(test_labels,'frames/')
-
-            self.test.dynamic = Data('test', dynamic_test_labels, normalization, sequence_length,
+            # print "3"
+            self.test = twoStreamData('test',self._path, test_labels, normalization, sequence_length,
                                      crop_size, num_classes, queue_size)
-            self.test.frames = Data('test', frames_test_labels,
-                                    normalization, sequence_length, crop_size, num_classes, queue_size)
 
         if validation_set and not validation_split:
-            self.validation.dynamic = Data('validation', dynamic_test_labels,
+            # print "4"
+            self.validation = twoStreamData('validation',self._path, test_labels,
                 normalization, sequence_length, crop_size, num_classes, queue_size)
-            self.validation.frames = Data('validation', frames_test_labels,
-                normalization, sequence_length, crop_size, num_classes, queue_size)
-        return self.train, self.validation#, self._test
+
+        # return self.train, self.validation, self.test
 
 
     def get_path_and_label(self, path):
         lines = open(path, 'r')
         lines = list(lines)
         return lines
-        
-    def get_video_lists(self, video_list, type_path):
-        lines = video_list
-        new_lines = [os.path.join(self._path, type_path, line) for line in lines]
-        return new_lines
+
 
     @property
     def data_shape(self):
@@ -230,3 +198,31 @@ class DataProvider(object):
     def n_classes(self):
         """return number of classes"""
         return self._num_classes
+
+
+class twoStreamData(object):
+    """docstring for twoStreamData"""
+    def __init__(self, name, path, video_list, normalization, sequence_length, crop_size,
+                 num_classes, queue_size):
+        self.path = path
+        self.name = name
+        self.video_list = video_list
+        self.sequence_length = sequence_length
+        self.crop_size = crop_size
+        self.normalization = normalization
+        self.num_classes = num_classes
+        self.queue_size = queue_size
+
+
+        self.dynamic_subpath = self.get_video_lists(self.path, self.video_list, 'hmdb51_dynamic/')
+        self.frames_subpath = self.get_video_lists(self.path, self.video_list, 'hmdb51_frames/')
+        # print "self.dynamic_subpath[1]",self.dynamic_subpath[1]
+        self.dynamic = Data(self.name, self.dynamic_subpath, normalization,
+                                           sequence_length, crop_size, num_classes, queue_size)
+        self.frames = Data(self.name, self.frames_subpath, normalization,
+                                           sequence_length, crop_size, num_classes, queue_size)
+    
+    def get_video_lists(self, path, video_list, type_path):
+        lines = video_list
+        new_lines = [os.path.join(self.path, type_path, line) for line in lines]
+        return new_lines
