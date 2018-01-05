@@ -1,6 +1,6 @@
 import os
 import random
-# import tempfile
+import sys
 from Queue import Queue
 from threading import Thread
 import numpy as np
@@ -8,7 +8,7 @@ import cv2
 
 class Data(object):
     """docstring for Data"""
-    def __init__(self, name, path, normalization, sequence_length, crop_size,
+    def __init__(self, name, my_indexes, path, normalization, sequence_length, crop_size,
                  num_classes, queue_size):
 
         self.path = path
@@ -19,6 +19,8 @@ class Data(object):
         self.num_classes = num_classes
         self.queue = DataQueue(name, queue_size)
         self.examples = None
+        #self.num = 0
+        self.my_indexes = my_indexes
         self._start_data_thread()
 
 
@@ -29,24 +31,40 @@ class Data(object):
         self.worker.start()
 
     def get_video_data(self):
+        my_num = 0
+        ind_len = len(self.path)
+        print "len of indexes,in get_video_data:",len(self.my_indexes)
         while True:
             #len(self.path)=1710(hmdb51)
-            index = random.randint(0, len(self.path)-1)
+            # index = random.randint(0, len(self.path)-1)
             # print "path[index]",self.path[index]
-            video_path, label = self.path[index].strip('\n').split()
+        # print "len(self.path)=",len(self.path)
+            if my_num != ind_len-1:
+                my_num += 1
+            elif my_num >= ind_len-1:
+                my_num = 0
+            ind = self.my_indexes[my_num]
+             #for index in range(len(self.path)-1):
+            video_path, label = self.path[ind].strip('\n').split()
             # print "video_path",video_path
-            # print "label:",label
             video = self.get_frames(video_path, self.sequence_length)
             if video is not None and len(video) == self.sequence_length:
                 video = np.array(video)
                 label = np.array(int(label))
                 self.queue.put((video, label))
 
+
+    def get_video_lists(self, path, video_list, type_path):
+        lines = video_list
+        new_lines = [os.path.join(self.path, type_path, line) for line in lines]
+        return new_lines
+
     def get_frames(self, filename, sequence_length=16):
         video = []
         start = 0
         # print "filename[1]",filename[1]
         for parent, dirnames, files in os.walk(filename):
+            # print "filename:",filename
             filenames = [file for file in files ]#if file.endswith(".jpeg", ".jpg", ".png")
             if len(filenames) < sequence_length:
                 # print "filenames<16"
@@ -64,6 +82,7 @@ class Data(object):
                 video.append(img)
             return video
 
+
     def normalize_image(self, img, normalization):
         """normalize image by 3 methods"""
         if normalization == 'std':
@@ -76,15 +95,12 @@ class Data(object):
             raise Exception("please set the norm method")
         return img
 
-
-
-
-
     @property
     def num_examples(self):
         if not self.examples:
             total = 0
             for line in self.path:
+                #print "line:",line
                 video_path, _ = line.strip('\n').split()
                 for root, dirs, files in os.walk(video_path):
                     total += len(files)
@@ -105,6 +121,8 @@ class Data(object):
         return new_labels
     def labels_for_one_hot(self, labels):
         return np.argmax(labels, axis=1)
+
+
 
 
 class DataQueue(object):
@@ -136,6 +154,8 @@ class DataQueue(object):
         return videos, labels
 
 
+
+
 class DataProvider(object):
     """get three types of data"""
     def __init__(self, path, num_classes, validation_set=None, test=False,
@@ -154,9 +174,9 @@ class DataProvider(object):
         self._crop_size = crop_size
         self._sequence_length = sequence_length
 
+        print "in data_provider: self.path",self._path
         train_labels = self.get_path_and_label(os.path.join(self._path, 'train.list'))
         test_labels = self.get_path_and_label(os.path.join(self._path, 'test.list'))
-
 
         if validation_set and validation_split:
             #shuffle data
@@ -179,8 +199,6 @@ class DataProvider(object):
             # print "4"
             self.validation = twoStreamData('validation',self._path, test_labels,
                 normalization, sequence_length, crop_size, num_classes, queue_size)
-
-        # return self.train, self.validation, self.test
 
 
     def get_path_and_label(self, path):
@@ -212,8 +230,10 @@ class twoStreamData(object):
         self.normalization = normalization
         self.num_classes = num_classes
         self.queue_size = queue_size
-
-
+        # print "len of video_list: in twoStreamData",len(self.video_list)
+        # my_indexes = list(range(len(self.video_list)))
+        # random.shuffle(my_indexes)
+        # print "len of my_indexes: in twoStreamData",len(my_indexes)
         self.dynamic_subpath = self.get_video_lists(self.path, self.video_list, 'hmdb51_dynamic/')
         self.frames_subpath = self.get_video_lists(self.path, self.video_list, 'hmdb51_frames/')
         # print "self.dynamic_subpath[1]",self.dynamic_subpath[1]

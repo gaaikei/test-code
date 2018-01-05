@@ -10,14 +10,14 @@ from data_providers.utils import get_data_provider_by_path
 
 
 train_params = {
-    'num_classes': 5,
-    'batch_size': 10,
-    'n_epochs': 70,
-    'crop_size': (150, 100),
+    'num_classes': 51,
+    'batch_size': 16,
+    'n_epochs': 40,
+    'crop_size': (64, 64),
     'sequence_length': 16,
     'initial_learning_rate': 0.1,
-    'reduce_lr_epoch_1': 30,  # epochs * 0.5
-    'reduce_lr_epoch_2': 55,  # epochs * 0.75
+    'reduce_lr_epoch_1': 20,  # epochs * 0.5
+    'reduce_lr_epoch_2': 30,  # epochs * 0.75
     'validation_set': True,
     'validation_split': None,  # None or float
     'queue_size': 300,
@@ -46,7 +46,7 @@ if __name__ == '__main__':
         'choices were restricted to used in paper (default: %(default)s)')
     parser.add_argument(
         '--depth', '-d', type=int, choices=[20, 30, 40, 100, 190, 250],
-        default=20,
+        default=40,
         help='Depth of whole network, restricted to paper choices (default: %(default)s)')
     parser.add_argument(
         '--dataset', '-ds', type=str,
@@ -55,7 +55,7 @@ if __name__ == '__main__':
         '--total_blocks', '-tb', type=int, default=3, metavar='',
         help='Total blocks of layers stack (default: %(default)s)')
     parser.add_argument(
-        '--keep_prob', '-kp', type=float, default=1.0, metavar='',
+        '--keep_prob', '-kp', type=float, default=0.5, metavar='',
         help="Keep probability for dropout.")
     parser.add_argument(
         '--gpu_id', '-gid', type=str, default='0',
@@ -152,12 +152,12 @@ if __name__ == '__main__':
     print("Initialize the model..")
     model = twoStreamDenseNet(data_provider=data_provider, **model_params)
     if args.train:
-        print("Data provider train videos: ", data_provider.train.num_examples)
+        print("Data provider train videos: ", data_provider.train.frames.num_examples)
         model.train_all_epochs(train_params)
     if args.test:
         if not args.train:
             model.load_model()
-        print("Data provider test videos: ", data_provider.test.num_examples)
+        print("Data provider test videos: ", data_provider.test.frames.num_examples)
         print("Testing...")
         losses = []
         accuracies = []

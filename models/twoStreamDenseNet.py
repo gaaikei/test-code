@@ -176,7 +176,7 @@ class twoStreamDenseNet(object):
     def _define_inputs(self):
         shape = [None]
         shape.extend(self.data_shape)
-        #print "shape:",shape
+        # print "shape:",shape
         self.frames = tf.placeholder(
             tf.float32,
             shape=shape,
@@ -470,7 +470,8 @@ class twoStreamDenseNet(object):
         spatial_prediction = tf.nn.softmax(spatial_logits)
         temproal_prediction = tf.nn.softmax(temporal_logits)
 
-        
+        self.predictions = (spatial_prediction + temproal_prediction)/2
+
         # Losses
         s_cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
             logits=spatial_logits, labels=self.labels))
@@ -478,7 +479,7 @@ class twoStreamDenseNet(object):
             logits=temporal_logits, labels=self.labels))
 
         cross_entropy = ( s_cross_entropy + t_cross_entropy )/2
-        self.cross_entropy = cross_entropy
+        self.cross_entropy = s_cross_entropy
         l2_loss = tf.add_n(
             [tf.nn.l2_loss(var) for var in tf.trainable_variables()])
 
@@ -497,7 +498,9 @@ class twoStreamDenseNet(object):
         accuracy_s = tf.reduce_mean(tf.cast(correct_prediction_s, tf.float32))
         accuracy_t = tf.reduce_mean(tf.cast(correct_prediction_t, tf.float32))
         accuracy = ( accuracy_s + accuracy_t ) /2
-        self.accuracy = accuracy
+        self.accuracy_s = accuracy_s
+        self.accuracy_t = accuracy_t
+        self.accuracy = accuracy_s
     # (Updated)
     def train_all_epochs(self, train_params):
         n_epochs           = train_params['n_epochs']
@@ -524,8 +527,10 @@ class twoStreamDenseNet(object):
                 print("Decrease learning rate, new lr = %f" % learning_rate)
 
             print("Training...")
+            print("one epoch start")
             loss, acc = self.train_one_epoch(
                 self.data_provider.train, batch_size, learning_rate)
+            print("one epoch done")
             if self.should_save_logs:
                 self.log_loss_accuracy(loss, acc, epoch, prefix='train')
 
@@ -553,6 +558,7 @@ class twoStreamDenseNet(object):
         num_examples = data.dynamic.num_examples
         total_loss = []
         total_accuracy = []
+        print "train one epoch...num_examples=",num_examples
         for i in range(num_examples // batch_size):
             # videos size is (numpy array):
             #   [batch_size, sequence_length, width, height, channels]
@@ -577,23 +583,23 @@ class twoStreamDenseNet(object):
                 self.batches_step += 1
                 self.log_loss_accuracy(
                     loss, accuracy, self.batches_step, prefix='per_batch',
-                    should_print=False)
+                    should_print=True)
         mean_loss = np.mean(total_loss)
         mean_accuracy = np.mean(total_accuracy)
         return mean_loss, mean_accuracy
 
     # (Updated)
     def test(self, data, batch_size):
-        num_examples = data.num_examples
+        num_examples = data.dynamic.num_examples
         total_loss = []
         total_accuracy = []
         for i in range(num_examples // batch_size):
-            dynamic = data.dynmaic.next_batch(batch_size)
-            frames = data.frames.next_batch(batch_size)
+            dynamic, labels = data.dynamic.next_batch(batch_size)
+            frames, labels = data.frames.next_batch(batch_size)
             feed_dict = {
-                self.frames: frames[0],
-                self.dynamic: dynamic[0],
-                self.labels: dynamic[1],
+                self.frames: frames,
+                self.dynamic: dynamic,
+                self.labels: labels,
                 self.is_training: False
             }
             fetches = [self.cross_entropy, self.accuracy, self.predictions]
