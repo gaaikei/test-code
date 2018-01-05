@@ -122,8 +122,8 @@ class twoStreamDenseNet(object):
 
     @property
     def model_identifier(self):
-      return "{}_growth_rate={}_depth={}_dataset_{}_total_block={}".format(
-        self.model_type, self.growth_rate, self.depth, self.dataset_name, self.total_blocks)
+      return "{}_growth_rate={}_depth={}_total_block={}".format(
+        self.model_type, self.growth_rate, self.depth, self.total_blocks)
 
     # (Updated)
     def save_model(self, global_step=None):
@@ -558,14 +558,14 @@ class twoStreamDenseNet(object):
         num_examples = data.dynamic.num_examples
         total_loss = []
         total_accuracy = []
-        print "train one epoch...num_examples=",num_examples
+        # print "train one epoch...num_examples=",num_examples
         for i in range(num_examples // batch_size):
             # videos size is (numpy array):
             #   [batch_size, sequence_length, width, height, channels]
             # labels size is (numpy array):
             #   [batch_size, num_classes] 
-            dynamic, labels = data.dynamic.next_batch(batch_size)
-            frames, labels = data.frames.next_batch(batch_size)
+            dynamic, frames, labels = data.dynamic.next_batch(batch_size)
+            # frames, labels = data.frames.next_batch(batch_size)
             feed_dict = {
             self.dynamic: dynamic,
             self.frames: frames,
@@ -594,8 +594,8 @@ class twoStreamDenseNet(object):
         total_loss = []
         total_accuracy = []
         for i in range(num_examples // batch_size):
-            dynamic, labels = data.dynamic.next_batch(batch_size)
-            frames, labels = data.frames.next_batch(batch_size)
+            dynamic, frames, labels = data.next_batch(batch_size)
+            # frames, labels = data.frames.next_batch(batch_size)
             feed_dict = {
                 self.frames: frames,
                 self.dynamic: dynamic,
