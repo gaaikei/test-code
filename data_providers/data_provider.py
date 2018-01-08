@@ -1,3 +1,6 @@
+"""
+data_provider for hmdb51
+"""
 import os
 import random
 import sys
@@ -6,7 +9,11 @@ from threading import Thread
 import numpy as np
 import cv2
 
+
 class Data(object):
+    """
+    return Data with num_examples/next_batch/
+    """
     def __init__(self, name, path, video_list, normalization, sequence_length,
                  crop_size, num_classes, queue_size):
         """
@@ -32,7 +39,7 @@ class Data(object):
         self.queue            = DataQueue(name, queue_size)
         self.examples         = None
         self._start_data_thread()
- 
+
     def get_frames_data(self, filename, sequence_length=16):
         ''' Given a directory containing extracted frames, return a video clip of
         (sequence_length) consecutive frames as a list of np arrays
@@ -46,8 +53,8 @@ class Data(object):
         '''
         video = []
         s_index = 0
-        for parent, dirnames, files in os.walk(filename):
-            filenames = [fi for fi in files ]#if fi.endswith((".png", ".jpg", "jpeg"))]
+        for _, _, files in os.walk(filename):
+            filenames = [fi for fi in files]#if fi.endswith((".png", ".jpg", "jpeg"))]
             if len(filenames) < sequence_length:
                 return None
             suffix = filenames[0].split('.', 1)[1]
@@ -73,14 +80,14 @@ class Data(object):
             video_path, label = self.video_list[index].strip('\n').split()
             frame_path = os.path.join(self.path, 'hmdb51_frames/', video_path)
             dynmaic_path =os.path.join(self.path, 'hmdb51_dynamic/', video_path)
-
-#            frame_path = os.path.join(self.path, 'hmdb10_frames/', video_path)
-#            dynmaic_path =os.path.join(self.path, 'hmdb10_dynamic/', video_path)
-	    #print "frame_path",frame_path
-            #print "dynmaic_path",dynmaic_path
+            # frame_path = os.path.join(self.path, 'hmdb10_frames/', video_path)
+            # dynmaic_path =os.path.join(self.path, 'hmdb10_dynamic/', video_path)
+            # print "frame_path",frame_path
+            # print "dynmaic_path",dynmaic_path
             dynamic = self.get_frames_data(dynmaic_path, self.sequence_length)
             frames = self.get_frames_data(frame_path, self.sequence_length)
-            if dynamic is not None and len(dynamic) == self.sequence_length and frames is not None and len(frames) == self.sequence_length :
+            if dynamic is not None and len(dynamic) == self.sequence_length and \
+            frames is not None and len(frames) == self.sequence_length:
                 # Put the video into the queue
                 dynamic = np.array(dynamic)
                 frames = np.array(frames)
@@ -95,6 +102,9 @@ class Data(object):
 
     @property
     def num_examples(self):
+        '''
+        return the number of examples to train/test
+        '''
         if not self.examples:
         # calculate the number of examples
             total = 0
@@ -102,18 +112,17 @@ class Data(object):
                 video_path, _ = line.strip('\n').split()
                 #frame_path = os.path.join(self.path, 'hmdb10_frames/', video_path)
                 frame_path = os.path.join(self.path, 'hmdb51_frames/', video_path)
-         	for root, dirs, files in os.walk(frame_path):
+                for _, _, files in os.walk(frame_path):
                     total += len(files)
             self.examples = total / self.sequence_length
         return self.examples*2
 
     def next_batch(self, batch_size):
-        ''' Get the next batches of the dataset 
+        ''' Get the next batches of the dataset
         Args
         batch_size: video batch size
-        
         Returns
-        videos: numpy, shape 
+        videos: numpy, shape
             [batch_size, sequence_length, height, width, channels]
         labels: numpy
             [batch_size, num_classes]
@@ -128,8 +137,8 @@ class Data(object):
     def normalize_image(self, img, normalization):
         """normalize image by 3 methods"""
         if normalization == 'std':
-	    if np.mean(img)==0:
-		print "it is ZERO!!!"
+            if np.mean(img) == 0:
+                print("it is ZERO!!!")
             img = (img - np.mean(img))/np.std(img)
         elif normalization == 'divide_256':
             img = img/256
@@ -140,10 +149,17 @@ class Data(object):
         return img
 
     def labels_to_one_hot(self, labels, num_classes):
+        '''
+        labels to one hot
+        '''
         new_labels = np.zeros((labels.shape[0], num_classes))
         new_labels[range(labels.shape[0]), labels] = np.ones(labels.shape)
         return new_labels
+
     def labels_for_one_hot(self, labels):
+        '''
+        labels for one hot
+        '''
         return np.argmax(labels, axis=1)
 
 class DataQueue(object):
@@ -174,7 +190,6 @@ class DataQueue(object):
         '''
         Args:
         batch_size: integer, the number of the item you want to get from the queue
-        
         Returns:
         videos: list, list of numpy data with shape
             [sequence_length, height, width, channels]
@@ -192,10 +207,15 @@ class DataQueue(object):
 
 
 class DataProvider(object):
+    '''
+    data_provider with train/valid/test
+    return data_shape with data_provider.data_shape()
+    return number of classes with data_provider.n_classes()
+    '''
     def __init__(self, path, num_classes, validation_set=None, test=False,
-                validation_split=None, normalization=None, crop_size=(64,64),
-                sequence_length=16, train_queue=None, valid_queue=None,
-                test_queue=None, train=False, queue_size=300, **kwargs):
+                 validation_split=None, normalization=None, crop_size=(64, 64),
+                 sequence_length=16, train_queue=None, valid_queue=None,
+                 test_queue=None, train=False, queue_size=300, **kwargs):
         """
         Args:
         num_classes: the number of the classes
