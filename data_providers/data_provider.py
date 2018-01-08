@@ -32,7 +32,7 @@ class Data(object):
         self.queue            = DataQueue(name, queue_size)
         self.examples         = None
         self._start_data_thread()
-
+ 
     def get_frames_data(self, filename, sequence_length=16):
         ''' Given a directory containing extracted frames, return a video clip of
         (sequence_length) consecutive frames as a list of np arrays
@@ -47,22 +47,22 @@ class Data(object):
         video = []
         s_index = 0
         for parent, dirnames, files in os.walk(filename):
-            filenames = [fi for fi in files if fi.endswith((".png", ".jpg", "jpeg"))]
-        if len(filenames) < sequence_length:
-            return None
-        suffix = filenames[0].split('.', 1)[1]
-        filenames_int = [i.split('.', 1)[0] for i in filenames]
-        filenames_int = sorted(filenames_int)
-        s_index = random.randint(0, len(filenames) - sequence_length)
-        for i in range(s_index, s_index + sequence_length):
-            image_name = str(filename) + '/' + str(filenames_int[i]) + '.' + suffix
-            # print image_name
-            img = cv2.imread(image_name)
-            img = cv2.resize(img, self.crop_size)
-            if self.normalization:
-                img_data = self.normalize_image(img, self.normalization)
+            filenames = [fi for fi in files ]#if fi.endswith((".png", ".jpg", "jpeg"))]
+            if len(filenames) < sequence_length:
+                return None
+            suffix = filenames[0].split('.', 1)[1]
+            filenames_int = [i.split('.', 1)[0] for i in filenames]
+            filenames_int = sorted(filenames_int)
+            s_index = random.randint(0, len(filenames) - sequence_length)
+            for i in range(s_index, s_index + sequence_length):
+                image_name = str(filename) + '/' + str(filenames_int[i]) + '.' + suffix
+               # print "image_name",image_name
+                img = cv2.imread(image_name)
+                img = cv2.resize(img, self.crop_size)
+                if self.normalization:
+                    img_data = self.normalize_image(img, self.normalization)
                 video.append(img_data)
-        return video
+            return video
 
     def extract_video_data(self):
         ''' Single tread to extract video and label information from the dataset
@@ -71,8 +71,13 @@ class Data(object):
         while True:
             index = random.randint(0, len(self.video_list)-1)
             video_path, label = self.video_list[index].strip('\n').split()
-            frame_path = os.path.join(self.path, 'hmdb51_frames/', self.video_list)
-            dynmaic_path =os.path.join(self.path, 'hmdb51_dynamic/', self.video_list)
+            frame_path = os.path.join(self.path, 'hmdb51_frames/', video_path)
+            dynmaic_path =os.path.join(self.path, 'hmdb51_dynamic/', video_path)
+
+#            frame_path = os.path.join(self.path, 'hmdb10_frames/', video_path)
+#            dynmaic_path =os.path.join(self.path, 'hmdb10_dynamic/', video_path)
+	    #print "frame_path",frame_path
+            #print "dynmaic_path",dynmaic_path
             dynamic = self.get_frames_data(dynmaic_path, self.sequence_length)
             frames = self.get_frames_data(frame_path, self.sequence_length)
             if dynamic is not None and len(dynamic) == self.sequence_length and frames is not None and len(frames) == self.sequence_length :
@@ -93,9 +98,11 @@ class Data(object):
         if not self.examples:
         # calculate the number of examples
             total = 0
-            for line in self.paths:
+            for line in self.video_list:
                 video_path, _ = line.strip('\n').split()
-                for root, dirs, files in os.walk(video_path):
+                #frame_path = os.path.join(self.path, 'hmdb10_frames/', video_path)
+                frame_path = os.path.join(self.path, 'hmdb51_frames/', video_path)
+         	for root, dirs, files in os.walk(frame_path):
                     total += len(files)
             self.examples = total / self.sequence_length
         return self.examples*2
@@ -116,11 +123,13 @@ class Data(object):
         frames = np.array(frames)
         labels = np.array(labels)
         labels = self.labels_to_one_hot(labels, self.num_classes)
-        return videos, labels
+        return dynamic, frames, labels
 
     def normalize_image(self, img, normalization):
         """normalize image by 3 methods"""
         if normalization == 'std':
+	    if np.mean(img)==0:
+		print "it is ZERO!!!"
             img = (img - np.mean(img))/np.std(img)
         elif normalization == 'divide_256':
             img = img/256
@@ -146,21 +155,20 @@ class DataQueue(object):
         block: boolean, block the put or get information if the queue is
             full or empty
         """
-        self.name         = name
+        self._name         = name
         self.block        = block
         self.maximum_item = maximum_item
-        self.queue        = Queue(maximum_item)
+        self._queue        = Queue(maximum_item)
 
     @property
     def queue(self):
-        return self.queue
-
+        return self._queue
     @property
     def name(self):
-        return self.name
+        return self._name
 
     def put(self, data):
-        self.queue.put(data, self.block)
+        self._queue.put(data, self.block)
 
     def get(self, batch_size):
         '''
@@ -176,9 +184,9 @@ class DataQueue(object):
         frames = []
         labels = []
         for i in range(batch_size):
-            dynamic, frames, label = self.queue.get(self.block)
-            dynamic.append(dynamic)
-            frames.append(frames)
+            dynamic_video, frames_video, label = self._queue.get(self.block)
+            dynamic.append(dynamic_video)
+            frames.append(frames_video)
             labels.append(label)
         return dynamic, frames, labels
 
