@@ -375,7 +375,7 @@ class twoStreamDenseNet(object):
         if method=='concat':
             spatial_temporal_output = tf.concat([spatial_output, temporal_output],3)
         elif method =='multiple':
-            spatial_temporal_output = tf.mul(spatial_output, temporal_output)
+            spatial_temporal_output = tf.multiply(spatial_output, temporal_output)
         else:
             pass
         return spatial_temporal_output
@@ -469,17 +469,23 @@ class twoStreamDenseNet(object):
         
         spatial_prediction = tf.nn.softmax(spatial_logits)
         temproal_prediction = tf.nn.softmax(temporal_logits)
+        predictions = tf.nn.softmax((spatial_logits + temporal_logits)/2)
 
-        self.predictions = (spatial_prediction + temproal_prediction)/2
+        self.predictions_s = spatial_prediction
+        self.predictions_t = temproal_prediction
+        self.predictions = predictions
 
         # Losses
         s_cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
             logits=spatial_logits, labels=self.labels))
         t_cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
             logits=temporal_logits, labels=self.labels))
+        cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
+            logits=logits, labels=self.labels))
 
-        cross_entropy = ( s_cross_entropy + t_cross_entropy )/2
-        self.cross_entropy = s_cross_entropy
+        self.spatial_loss = s_cross_entropy
+        self.temporal_loss = t_cross_entropy
+        self.cross_entropy = cross_entropy
         l2_loss = tf.add_n(
             [tf.nn.l2_loss(var) for var in tf.trainable_variables()])
 
@@ -495,12 +501,17 @@ class twoStreamDenseNet(object):
         correct_prediction_t = tf.equal(
             tf.argmax(temproal_prediction, 1),
             tf.argmax(self.labels, 1))
+        correct_predictions = tf.equal(
+            tf.argmax(predictions, 1),
+            tf.argmax(self.labels, 1))
+
         accuracy_s = tf.reduce_mean(tf.cast(correct_prediction_s, tf.float32))
         accuracy_t = tf.reduce_mean(tf.cast(correct_prediction_t, tf.float32))
-        accuracy = ( accuracy_s + accuracy_t ) /2
+        accuracy = tf.reduce_mean(tf.cast(correct_predictions, tf.float32))
+
         self.accuracy_s = accuracy_s
         self.accuracy_t = accuracy_t
-        self.accuracy = accuracy_s
+        self.accuracy = accuracy
     # (Updated)
     def train_all_epochs(self, train_params):
         n_epochs           = train_params['n_epochs']
