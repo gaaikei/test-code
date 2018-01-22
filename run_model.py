@@ -12,15 +12,15 @@ from data_providers.utils import get_data_provider_by_path
 train_params = {
     'num_classes': 51,
     'batch_size': 16,
-    'n_epochs': 30,
-    'crop_size': (128, 128),
+    'n_epochs': 40,
+    'crop_size': (64, 64),
     'sequence_length': 16,
     'initial_learning_rate': 0.1,
-    'reduce_lr_epoch_1': 5, 
-    'reduce_lr_epoch_2': 15, 
+    'reduce_lr_epoch_1': 20,  # epochs * 0.5
+    'reduce_lr_epoch_2': 30,  # epochs * 0.75
     'validation_set': True,
     'validation_split': None,  # None or float
-    'queue_size': 100,
+    'queue_size': 300,
     'normalization': 'std',  # None, divide_256, divide_255, std
 }
 
@@ -46,7 +46,7 @@ if __name__ == '__main__':
         'choices were restricted to used in paper (default: %(default)s)')
     parser.add_argument(
         '--depth', '-d', type=int, choices=[20, 30, 40, 100, 190, 250],
-        default=30,
+        default=40,
         help='Depth of whole network, restricted to paper choices (default: %(default)s)')
     parser.add_argument(
         '--dataset', '-ds', type=str,
@@ -55,7 +55,7 @@ if __name__ == '__main__':
         '--total_blocks', '-tb', type=int, default=3, metavar='',
         help='Total blocks of layers stack (default: %(default)s)')
     parser.add_argument(
-        '--keep_prob', '-kp', type=float, default=0.8, metavar='',
+        '--keep_prob', '-kp', type=float, default=0.5, metavar='',
         help="Keep probability for dropout.")
     parser.add_argument(
         '--gpu_id', '-gid', type=str, default='0',
@@ -152,32 +152,19 @@ if __name__ == '__main__':
     print("Initialize the model..")
     model = twoStreamDenseNet(data_provider=data_provider, **model_params)
     if args.train:
-        print("Data provider train videos: ", data_provider.train.num_examples)
+        print("Data provider train videos: ", data_provider.train.frames.num_examples)
         model.train_all_epochs(train_params)
     if args.test:
         if not args.train:
             model.load_model()
-        print("Data provider test videos: ", data_provider.test.num_examples)
+        print("Data provider test videos: ", data_provider.test.frames.num_examples)
         print("Testing...")
         losses = []
         accuracies = []
-        spatial_losses = []
-        temporal_losses = []
-        spatial_accuracies = []
-        temporal_accuracies = []
         for i in range(10):
-            loss_s,loss_t, loss, ac_s, ac_t, accuracy = model.test(data_provider.test, batch_size=16)
-            spatial_losses.append(loss_s)
-            temporal_losses.append(loss_s)
+            loss, accuracy = model.test(data_provider.test, batch_size=10)
             losses.append(loss)
-            spatial_accuracies.append(ac_s)
-            temporal_accuracies.append(ac_s)
             accuracies.append(accuracy)
-        spatial_loss = np.mean(spatial_losses)
-        temporal_loss = np.mean(temporal_losses)
         loss = np.mean(losses)
-        spatial_accuracy = np.mean(spatial_accuracies)
-        temporal_accuracy = np.mean(temporal_accuracies)
         accuracy = np.mean(accuracies)
-        print("spatial_loss: %f , temporal_loss: %f ,mean cross_entropy: %f" % (spatial_loss, temporal_loss, loss))
-        print("spatial_accuracy:%f, temporal_accuracy: %f ,mean accuracy: %f" % (spatial_accuracy, temporal_accuracy, accuracy))
+        print("mean cross_entropy: %f, mean accuracy: %f" % (loss, accuracy))
