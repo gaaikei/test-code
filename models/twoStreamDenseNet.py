@@ -12,7 +12,7 @@ TF_VERSION = float('.'.join(tf.__version__.split('.')[:2]))
 class twoStreamDenseNet(object):
     def __init__(self, data_provider, growth_rate, depth, total_blocks,
     keep_prob, dataset,weight_decay, nesterov_momentum, model_type,
-    should_save_logs, should_save_model,renew_logs=False, reduction=1.0,
+    should_save_logs, should_save_model,renew_logs=False, reduction=0.8,
     bc_mode=False,**kwargs):
         self.data_provider          = data_provider
         self.data_shape             = data_provider.data_shape
@@ -63,6 +63,8 @@ class twoStreamDenseNet(object):
     def _initialize_session(self):
         """Initialize session, variables, saver"""
         config = tf.ConfigProto()
+        # gpu_options=tf.GPUOptions(per_process_gpu_memory_fraction=0.5)
+        # config=tf.ConfigProto(gpu_options=gpu_options)
         # restrict model GPU memory utilization to min required
         config.gpu_options.allow_growth = True
         self.sess = tf.Session(config=config)
@@ -125,7 +127,7 @@ class twoStreamDenseNet(object):
       return "{}_growth_rate={}_depth={}_total_block={}".format(
         self.model_type, self.growth_rate, self.depth, self.total_blocks)
 
-    # (Updated)
+    # (Updated) 
     def save_model(self, global_step=None):
       self.saver.save(self.sess, self.save_path[1], global_step=global_step)
 
@@ -149,26 +151,30 @@ class twoStreamDenseNet(object):
         return 1
 
     # (Updated)
-    def log_loss_accuracy(self, loss, accuracy, epoch, prefix,
+    def log_loss_accuracy(self,spatial_loss, temporal_loss, loss, spatial_accuracy, temporal_accuracy, accuracy, epoch, prefix,
     should_print=True):
         if should_print:
-            print("mean cross_entropy: %f, mean accuracy: %f" % (
-            loss, accuracy))
+            print("    spatial_loss: %f,     temporal_loss: %f, mean cross_entropy: %f" % (spatial_loss, temporal_loss, loss))
+            print("spatial_accuracy: %f, temporal_accuracy: %f,      mean accuracy: %f" % (spatial_accuracy, temporal_accuracy, accuracy))
         summary = tf.Summary(value=[
-            tf.Summary.Value(
-            tag='loss_%s' % prefix, simple_value=float(loss)),
-            tf.Summary.Value(
-            tag='accuracy_%s' % prefix, simple_value=float(accuracy))
+            tf.Summary.Value(tag='spatial_loss_%s'%prefix, simple_value =float(spatial_loss)),
+            tf.Summary.Value(tag='temporal_loss_%s'%prefix, simple_value =float(temporal_loss)),
+            tf.Summary.Value(tag='loss_%s' % prefix, simple_value=float(loss)),
+            tf.Summary.Value(tag='spatial_accuracy_%s' % prefix, simple_value=float(spatial_accuracy)),
+            tf.Summary.Value(tag='temporal_accuracy_%s' % prefix, simple_value=float(temporal_accuracy)),
+            tf.Summary.Value(tag='accuracy_%s' % prefix, simple_value=float(accuracy))
         ])
         self.summary_writer.add_summary(summary, epoch)
 
     def log_test_results(self, predictions, loss, accuracy):
         testResults = open('testResults.txt', 'w')
-        testResults.write("mean cross_entropy: %f, mean accuracy: %f" % (
-            loss, accuracy))
-        testResults.write("--------------------predictions.spactial-----------------")
-        testResults.writelines(predictions.spactial)
-        testResults.write("--------------------predictions.tempral-----------------")
+        testResults = write("    spatial_loss: %f,     temporal_loss: %f , mean cross_entropy: %f" % (spatial_loss, temporal_loss, loss))
+        testResults = write("spatial_accuracy: %f, temporal_accuracy: %f ,      mean accuracy: %f" % (spatial_accuracy, temporal_accuracy, accuracy))
+        # testResults.write("mean cross_entropy: %f, mean accuracy: %f" % (
+        #     loss, accuracy))
+        testResults.write("--------------------predictions.spatial-----------------")
+        testResults.writelines(predictions.spatial)
+        testResults.write("--------------------predictions.temporal-----------------")
         testResults.writelines(predictions.temproal)
 
 
@@ -211,7 +217,7 @@ class twoStreamDenseNet(object):
                 output = tf.nn.relu(output)
             # convolution
             output = self.conv3d(
-            output, out_features=out_features, kernel_size=kernel_size)
+                output, out_features=out_features, kernel_size=kernel_size)
             # dropout(in case of training and in case it is no 1.0)
             output = self.dropout(output)
         return output
@@ -375,7 +381,7 @@ class twoStreamDenseNet(object):
         if method=='concat':
             spatial_temporal_output = tf.concat([spatial_output, temporal_output],3)
         elif method =='multiple':
-            spatial_temporal_output = tf.multiply(spatial_output, temporal_output)
+            spatial_temporal_output = tf.mul(spatial_output, temporal_output)
         else:
             pass
         return spatial_temporal_output
@@ -427,6 +433,16 @@ class twoStreamDenseNet(object):
             pool_depth = 2
             spatial_output = self.transition_layer(spatial_output, pool_depth)
             #[?,8,8,8,84]
+        with tf.variable_scope("temporal_Block_1"):
+            temporal_output = self.add_block(temporal_output, growth_rate, layers_per_block)
+        with tf.variable_scope("Transition_after_temporal_Block_1"):
+            pool_depth = 2
+            temporal_output = self.transition_layer(temporal_output, pool_depth)
+
+
+
+
+
         with tf.variable_scope("spatial_Block_2"):
             spatial_output = self.add_block(spatial_output, growth_rate, layers_per_block)
             #[?,8,8,8,144])
@@ -434,14 +450,6 @@ class twoStreamDenseNet(object):
             pool_depth = 2
             spatial_output = self.transition_layer(spatial_output, pool_depth)
             #[?,4,4,4,144]
-
-
-        #add 2 blocks before fusion:
-        with tf.variable_scope("temporal_Block_1"):
-            temporal_output = self.add_block(temporal_output, growth_rate, layers_per_block)
-        with tf.variable_scope("Transition_after_temporal_Block_1"):
-            pool_depth = 2
-            temporal_output = self.transition_layer(temporal_output, pool_depth)
         with tf.variable_scope("temporal_Block_2"):
             temporal_output = self.add_block(temporal_output, growth_rate, layers_per_block)
         with tf.variable_scope("Transition_after_temporal_Block_2"):
@@ -451,7 +459,8 @@ class twoStreamDenseNet(object):
 
         #fusion
         with tf.variable_scope("NetworkFusion"):
-            spatial_temporal_output = tf.multiply(spatial_output, temporal_output)
+            # spatial_temporal_output = tf.multiply(spatial_output, temporal_output)
+            spatial_temporal_output = spatial_output + temporal_output
 
         #add  blocks after fusion :
         with tf.variable_scope("spatial_Block_3"):
@@ -466,10 +475,11 @@ class twoStreamDenseNet(object):
             spatial_logits = self.trainsition_layer_to_classes(spatial_output)
         with tf.variable_scope("Transition_to_classes_t"):
             temporal_logits = self.trainsition_layer_to_classes(temporal_output)     
-        
+
+        logits = (spatial_logits + temporal_logits)/2
         spatial_prediction = tf.nn.softmax(spatial_logits)
         temproal_prediction = tf.nn.softmax(temporal_logits)
-        predictions = tf.nn.softmax((spatial_logits + temporal_logits)/2)
+        predictions = tf.nn.softmax(logits)
 
         self.predictions_s = spatial_prediction
         self.predictions_t = temproal_prediction
@@ -482,7 +492,7 @@ class twoStreamDenseNet(object):
             logits=temporal_logits, labels=self.labels))
         cross_entropy = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
             logits=logits, labels=self.labels))
-
+        
         self.spatial_loss = s_cross_entropy
         self.temporal_loss = t_cross_entropy
         self.cross_entropy = cross_entropy
@@ -493,7 +503,9 @@ class twoStreamDenseNet(object):
         optimizer = tf.train.MomentumOptimizer(
             self.learning_rate, self.nesterov_momentum, use_nesterov=True)
         self.train_step = optimizer.minimize(
-            cross_entropy + l2_loss * self.weight_decay)
+            s_cross_entropy + t_cross_entropy + cross_entropy + l2_loss * self.weight_decay)
+        # self.train_step = optimizer.minimize(
+        #     cross_entropy + l2_loss * self.weight_decay)
 
         correct_prediction_s = tf.equal(
             tf.argmax(spatial_prediction, 1),
@@ -508,9 +520,8 @@ class twoStreamDenseNet(object):
         accuracy_s = tf.reduce_mean(tf.cast(correct_prediction_s, tf.float32))
         accuracy_t = tf.reduce_mean(tf.cast(correct_prediction_t, tf.float32))
         accuracy = tf.reduce_mean(tf.cast(correct_predictions, tf.float32))
-
-        self.accuracy_s = accuracy_s
-        self.accuracy_t = accuracy_t
+        self.spatial_accuracy = accuracy_s
+        self.temporal_accuracy = accuracy_t
         self.accuracy = accuracy
     # (Updated)
     def train_all_epochs(self, train_params):
@@ -539,18 +550,18 @@ class twoStreamDenseNet(object):
 
             print("Training...")
             print("one epoch start")
-            loss, acc = self.train_one_epoch(
+            loss_s, loss_t, loss, ac_s, ac_t, acc = self.train_one_epoch(
                 self.data_provider.train, batch_size, learning_rate)
             print("one epoch done")
             if self.should_save_logs:
-                self.log_loss_accuracy(loss, acc, epoch, prefix='train')
+                self.log_loss_accuracy(loss_s, loss_t, loss, ac_s, ac_t, acc, epoch, prefix='train')
 
             if train_params.get('validation_set', False):
                 print("Validation...")
-            loss, acc = self.test(
+            loss_s, loss_t, loss, ac_s, ac_t, acc = self.test(
                 self.data_provider.validation, batch_size)
             if self.should_save_logs:
-                self.log_loss_accuracy(loss, acc, epoch, prefix='valid')
+                self.log_loss_accuracy(loss_s, loss_t, loss, ac_s, ac_t, acc, epoch, prefix='valid')
 
             time_per_epoch = time.time() - start_time
             seconds_left = int((n_epochs - epoch) * time_per_epoch)
@@ -566,8 +577,12 @@ class twoStreamDenseNet(object):
 
     # (Updated)
     def train_one_epoch(self, data, batch_size, learning_rate):
-        num_examples = data.dynamic.num_examples
+        num_examples = data.num_examples
         total_loss = []
+        total_temporal_loss = []
+        total_spatial_loss = []
+        total_spatial_accuracy = []
+        total_temporal_accuracy = []
         total_accuracy = []
         # print "train one epoch...num_examples=",num_examples
         for i in range(num_examples // batch_size):
@@ -575,7 +590,7 @@ class twoStreamDenseNet(object):
             #   [batch_size, sequence_length, width, height, channels]
             # labels size is (numpy array):
             #   [batch_size, num_classes] 
-            dynamic, frames, labels = data.dynamic.next_batch(batch_size)
+            dynamic, frames, labels = data.next_batch(batch_size)
             # frames, labels = data.frames.next_batch(batch_size)
             feed_dict = {
             self.dynamic: dynamic,
@@ -585,25 +600,44 @@ class twoStreamDenseNet(object):
             self.is_training: True,
             }
 
-            fetches = [self.train_step, self.cross_entropy, self.accuracy]
+            fetches = [self.train_step, self.spatial_loss, self.temporal_loss, self.cross_entropy,
+                                        self.spatial_accuracy, self.temporal_accuracy, self.accuracy]
             result = self.sess.run(fetches, feed_dict=feed_dict)
-            _, loss, accuracy = result
+            _, spatial_loss, temporal_loss, loss, spatial_accuracy, temporal_accuracy, accuracy = result
+            
+            total_spatial_loss.append(spatial_loss)
+            total_temporal_loss.append(temporal_loss)
             total_loss.append(loss)
+            total_spatial_accuracy.append(spatial_accuracy)
+            total_temporal_accuracy.append(temporal_accuracy)
             total_accuracy.append(accuracy)
-            if self.should_save_logs:
-                self.batches_step += 1
-                self.log_loss_accuracy(
-                    loss, accuracy, self.batches_step, prefix='per_batch',
-                    should_print=True)
+
+            self.batches_step += 1
+            prefix = 'per_batch'
+            if self.batches_step % 200 == 0:
+                should_print = True
+            else:
+                should_print = False
+            self.log_loss_accuracy(
+                spatial_loss, temporal_loss, loss, spatial_accuracy, temporal_accuracy, accuracy, self.batches_step, prefix,
+                should_print)
+        spatial_loss = np.mean(total_spatial_loss)
+        temporal_loss = np.mean(total_temporal_loss)
+        spatial_accuracy = np.mean(total_spatial_accuracy)
+        temporal_accuracy = np.mean(total_temporal_accuracy)
         mean_loss = np.mean(total_loss)
         mean_accuracy = np.mean(total_accuracy)
-        return mean_loss, mean_accuracy
+        return spatial_loss, temporal_loss, mean_loss, spatial_accuracy, temporal_accuracy, mean_accuracy
 
     # (Updated)
     def test(self, data, batch_size):
-        num_examples = data.dynamic.num_examples
+        num_examples = data.num_examples
         total_loss = []
         total_accuracy = []
+        spatial_losses = []
+        temporal_losses = []
+        spatial_accuracies = []
+        temporal_accuracies = []
         for i in range(num_examples // batch_size):
             dynamic, frames, labels = data.next_batch(batch_size)
             # frames, labels = data.frames.next_batch(batch_size)
@@ -613,10 +647,21 @@ class twoStreamDenseNet(object):
                 self.labels: labels,
                 self.is_training: False
             }
-            fetches = [self.cross_entropy, self.accuracy, self.predictions]
-            loss, accuracy, predictions = self.sess.run(fetches, feed_dict=feed_dict)
+            fetches = [self.predictions_s, self.predictions_t, self.predictions, 
+                       self.spatial_loss, self.temporal_loss, self.cross_entropy, 
+                       self.spatial_accuracy, self.temporal_accuracy, self.accuracy]
+            result = self.sess.run(fetches, feed_dict=feed_dict)
+            predictions_s, predictions_t, predictions, spatial_loss, temporal_loss, loss, spatial_accuracy, temporal_accuracy, accuracy  = result
+            spatial_losses.append(spatial_loss)
+            temporal_losses.append(temporal_loss)
             total_loss.append(loss)
+            spatial_accuracies.append(spatial_accuracy)
+            temporal_accuracies.append(temporal_accuracy)
             total_accuracy.append(accuracy)
+        spatial_loss = np.mean(spatial_losses)
+        temporal_loss = np.mean(temporal_losses)
+        spatial_accuracy = np.mean(spatial_accuracies)
+        temporal_accuracy = np.mean(temporal_accuracies)
         mean_loss = np.mean(total_loss)
         mean_accuracy = np.mean(total_accuracy)
-        return mean_loss, mean_accuracy
+        return spatial_loss, temporal_loss, mean_loss, spatial_accuracy, temporal_accuracy, mean_accuracy

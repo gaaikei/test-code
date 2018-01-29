@@ -5,6 +5,9 @@ from Queue import Queue
 from threading import Thread
 import numpy as np
 import cv2
+import time
+from datetime import timedelta
+
 
 class Data(object):
     def __init__(self, name, path, video_list, normalization, sequence_length,
@@ -46,6 +49,7 @@ class Data(object):
         '''
         video = []
         s_index = 0
+        crop_size = self.crop_size 
         for parent, dirnames, files in os.walk(filename):
             filenames = [fi for fi in files ]#if fi.endswith((".png", ".jpg", "jpeg"))]
             if len(filenames) < sequence_length:
@@ -56,10 +60,23 @@ class Data(object):
             s_index = random.randint(0, len(filenames) - sequence_length)
             for i in range(s_index, s_index + sequence_length):
                 image_name = str(filename) + '/' + str(filenames_int[i]) + '.' + suffix
-               # print "image_name",image_name
+                # print "image_name",image_name
                 img = cv2.imread(image_name)
-                img = cv2.resize(img, self.crop_size)
+
+                # height = img.shape[0]
+                # width = img.shape[1]
+                # center_x = img.shape[0]/2
+                # center_y = img.shape[1]/2
+                # if height - center_y >= crop_size[0]/2 and width - center_x >= crop_size[1]/2:
+                #     img = img[center_y - crop_size[0]/2:center_y + crop_size[0]/2, center_x - crop_size[1]/2:center_x + crop_size[1]/2]
+                # else:
+                #     img = cv2.resize(img, crop_size)
+                img = cv2.resize(img, crop_size)
                 if self.normalization:
+                    if np.mean(img)==0:
+                        print "[mean=ZERO]image_name",image_name
+                    if np.std(img)==0:
+                        print "[std=ZERO]image_name",image_name
                     img_data = self.normalize_image(img, self.normalization)
                 video.append(img_data)
             return video
@@ -68,15 +85,16 @@ class Data(object):
         ''' Single tread to extract video and label information from the dataset
         '''
         # Generate one randome index and
+        # total_start_time   = time.time()
         while True:
+            # start_time = time.time()
             index = random.randint(0, len(self.video_list)-1)
             video_path, label = self.video_list[index].strip('\n').split()
             frame_path = os.path.join(self.path, 'hmdb51_frames/', video_path)
             dynmaic_path =os.path.join(self.path, 'hmdb51_dynamic/', video_path)
-
 #            frame_path = os.path.join(self.path, 'hmdb10_frames/', video_path)
 #            dynmaic_path =os.path.join(self.path, 'hmdb10_dynamic/', video_path)
-	    #print "frame_path",frame_path
+        #print "frame_path",frame_path
             #print "dynmaic_path",dynmaic_path
             dynamic = self.get_frames_data(dynmaic_path, self.sequence_length)
             frames = self.get_frames_data(frame_path, self.sequence_length)
@@ -86,6 +104,10 @@ class Data(object):
                 frames = np.array(frames)
                 label = np.array(int(label))
                 self.queue.put((dynamic, frames, label))
+            # time_per_video = time.time() - start_time
+            # print("Time per video: %s, Est. complete in: %s" % (
+                # str(timedelta(seconds=time_per_video))))
+
 
     def _start_data_thread(self):
         print("Start thread: %s data preparation ..." % self.name)
@@ -102,7 +124,7 @@ class Data(object):
                 video_path, _ = line.strip('\n').split()
                 #frame_path = os.path.join(self.path, 'hmdb10_frames/', video_path)
                 frame_path = os.path.join(self.path, 'hmdb51_frames/', video_path)
-         	for root, dirs, files in os.walk(frame_path):
+                for root, dirs, files in os.walk(frame_path):
                     total += len(files)
             self.examples = total / self.sequence_length
         return self.examples*2
@@ -128,8 +150,6 @@ class Data(object):
     def normalize_image(self, img, normalization):
         """normalize image by 3 methods"""
         if normalization == 'std':
-	    if np.mean(img)==0:
-		print "it is ZERO!!!"
             img = (img - np.mean(img))/np.std(img)
         elif normalization == 'divide_256':
             img = img/256
