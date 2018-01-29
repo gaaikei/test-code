@@ -1,9 +1,11 @@
 # two-stream-dense
 
-##fusion methods
+## fusion methods
+
 - multiply
 - add didrectly
 
-##dataset
+## dataset
+
 - hmdb51
 - ucf101
