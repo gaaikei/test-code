@@ -3,7 +3,7 @@
 ## fusion methods
 
 - multiply
-- add didrectly
+- add directly
 
 ## dataset
 
